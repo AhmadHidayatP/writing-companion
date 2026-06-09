@@ -1,0 +1,12 @@
+{
+  "framework": "nextjs",
+  "buildCommand": "npm run build",
+  "devCommand": "npm run dev",
+  "installCommand": "npm install",
+  "env": {
+    "GITHUB_TOKEN": "@github-token",
+    "WORKIQ_ENDPOINT": "@workiq-endpoint",
+    "WORKIQ_API_KEY": "@workiq-api-key",
+    "WORKIQ_INDEX_NAME": "@workiq-index-name"
+  }
+}

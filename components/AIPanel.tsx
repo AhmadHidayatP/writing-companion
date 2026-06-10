@@ -19,9 +19,10 @@ interface Props {
   onModeChange: (mode: AIMode) => void
   onApply: (text: string) => void
   onRetry: () => void
-  contextSource: 'workiq' | 'mock' | 'none'
+  contextSource: 'mock-foundryiq' | 'foundryiq' | 'azure-search' | 'none'
   aiProviderStatus: string
   iqStatus: string
+  iqRetrievalStatus: string
 }
 
 const MODES: { value: AIMode; label: string; desc: string }[] = [
@@ -34,7 +35,7 @@ const MODES: { value: AIMode; label: string; desc: string }[] = [
 export default function AIPanel({
   suggestions, isLoading, error, activeMode,
   onModeChange, onApply, onRetry, contextSource,
-  aiProviderStatus, iqStatus,
+  aiProviderStatus, iqStatus, iqRetrievalStatus,
 }: Props) {
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
@@ -73,21 +74,28 @@ export default function AIPanel({
         <div className="px-3 py-1.5 rounded-lg text-xs bg-blue-50 text-blue-700 border border-blue-200">
           {iqStatus}
         </div>
+        <div className={`px-3 py-1.5 rounded-lg text-xs border ${
+          contextSource === 'mock-foundryiq'
+            ? 'bg-amber-50 text-amber-700 border-amber-200'
+            : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+        }`}>
+          {iqRetrievalStatus}
+        </div>
       </div>
 
       {/* Context badge */}
       {contextSource !== 'none' && (
         <div className={`
           mx-3 mt-2 px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5
-          ${contextSource === 'workiq'
+          ${contextSource === 'foundryiq' || contextSource === 'azure-search'
             ? 'bg-blue-50 text-blue-700 border border-blue-200'
             : 'bg-ink-100 text-ink-500 border border-ink-200'
           }
         `}>
           <Sparkles size={11} />
-          {contextSource === 'workiq'
-            ? 'Menggunakan konteks dari Work IQ'
-            : 'Konteks: mode development (mock)'
+          {contextSource === 'foundryiq' || contextSource === 'azure-search'
+            ? 'Menggunakan konteks dari Microsoft IQ Knowledge Layer'
+            : 'Foundry IQ-style retrieval: demo fallback'
           }
         </div>
       )}

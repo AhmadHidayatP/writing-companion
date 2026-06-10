@@ -1,63 +1,66 @@
-# NulisIQ - AI Writing Companion for Indonesian Writers
+# NulisIQ - Memory-Aware Writing Companion for Indonesian Creators
 
-NulisIQ is a Next.js 14 writing companion built for the Microsoft Agents League Hackathon. It helps Indonesian writers request suggestions, revisions, continuations, and consistency checks while keeping manuscript context in the loop.
+NulisIQ is a Next.js 14 writing companion built for the Microsoft Agents League Hackathon. It helps Indonesian creators generate suggestions, revisions, continuations, and consistency checks while grounding AI output in manuscript memory.
 
-## Demo Reliability
+NulisIQ integrates a Microsoft IQ knowledge layer through Foundry IQ-style retrieval. The writing agent retrieves manuscript memory from a knowledge index, then uses that context to generate grounded writing suggestions, revisions, continuations, and consistency checks.
 
-GitHub Models support is optional because model access can vary by account. If GitHub Models returns `403` or "No access to model", NulisIQ falls back to mock AI so the demo remains usable.
+This is not a full Work IQ integration. Real Work IQ depends on Microsoft 365 Copilot/admin access. The MVP positions the Microsoft IQ layer as Foundry IQ-style manuscript knowledge retrieval backed by Azure AI Search, with a mock fallback for demo reliability.
 
-For demo reliability, NulisIQ defaults to:
+## Architecture
 
-```env
-AI_PROVIDER=mock
-WORKIQ_MODE=mock
-```
+Editor
+-> Foundry IQ-style manuscript retrieval
+-> AI prompt grounding
+-> AI generation
+-> writing output with memory consistency
 
-The mock AI fallback returns realistic Indonesian writing guidance and is safe to run without tokens.
+The AI model remains the generator. Foundry IQ-style retrieval provides manuscript context, retrieved documents, writing style memory, theme memory, character/concept memory, previous draft summary, and a safety note.
 
-## Microsoft IQ Layer
+## Demo Scenario
 
-NulisIQ includes a Work IQ-ready contextual memory layer. The current MVP uses mock manuscript memory fallback, then passes that context into the AI prompt together with:
+- Load manuscript memory.
+- Write a rough paragraph.
+- Generate a continuation.
+- Rewrite in the writer's style.
+- Run a consistency check.
+- Show retrieved manuscript context.
 
-- current editor text
-- selected AI mode
-- manuscript memory
-- Work IQ or mock Work IQ context
-- writing style
-- themes
-- character or concept memory
-- previous draft summary
+## Providers
+
+AI generation can use GitHub Models or another configured provider through the `/api/copilot` route. GitHub Models access can vary by account, so NulisIQ keeps a mock AI fallback and does not crash when a token or model is unavailable.
+
+Foundry IQ-style retrieval can run in two modes:
+
+- `IQ_PROVIDER=mock` uses dummy Indonesian self-development manuscript memory.
+- `IQ_PROVIDER=foundry` retrieves manuscript documents from Azure AI Search.
+
+The demo uses dummy manuscript data about reflective Indonesian writing, burnout, self-worth, validation, overthinking, and a first-person narrator for a young Indonesian audience.
 
 No confidential information should be uploaded to this MVP or to any external AI provider.
 
-## AI Providers
+## Environment
 
-Set `AI_PROVIDER` in `.env.local`:
+Copy the example file:
 
-```env
-AI_PROVIDER=mock
+```bash
+cp .env.local.example .env.local
 ```
 
-Supported values:
-
-- `mock` - default, token-free demo mode
-- `azure` - Azure OpenAI / Azure AI Foundry-compatible chat completions
-- `github` - GitHub Models-compatible chat completions
-
-Azure variables:
+Example values:
 
 ```env
-AZURE_OPENAI_ENDPOINT=
-AZURE_OPENAI_API_KEY=
-AZURE_OPENAI_DEPLOYMENT=
-```
-
-GitHub Models variables:
-
-```env
+AI_PROVIDER=github
 GITHUB_MODELS_TOKEN=
 GITHUB_MODEL=
+
+IQ_PROVIDER=mock
+AZURE_SEARCH_ENDPOINT=
+AZURE_SEARCH_API_KEY=
+AZURE_SEARCH_INDEX=writing-companion-index
+AZURE_SEARCH_API_VERSION=2025-09-01
 ```
+
+For demo reliability, `IQ_PROVIDER=mock` works without Azure Search credentials. If Azure Search variables are missing or retrieval fails, the app returns mock manuscript memory instead of crashing.
 
 ## Getting Started
 
@@ -86,8 +89,8 @@ npm run lint
 - TypeScript
 - Tailwind CSS
 - Tiptap editor
-- Optional GitHub Models
-- Azure OpenAI / Azure AI Foundry-ready provider path
-- Work IQ-ready contextual memory layer
+- GitHub Models or mock AI generation
+- Foundry IQ-style manuscript retrieval
+- Azure AI Search-ready knowledge index integration
 
-GitHub Copilot was used as an assisted development tool during development.
+GitHub Copilot was used as an AI-assisted development tool during development.

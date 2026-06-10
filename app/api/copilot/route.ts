@@ -11,12 +11,19 @@ interface CopilotRequest {
   context?: string
   mode?: AIMode
   editorText?: string
-  manuscriptMemory?: string
+  foundryIqContext?: string
   workIqContext?: string
+  retrievedDocuments?: Array<{
+    title: string
+    source: string
+    chapter: string
+    content: string
+  }>
   writingStyle?: string
   themes?: string[]
   characterMemory?: string
   previousDraftSummary?: string
+  safetyNote?: string
 }
 
 const TONE_SYSTEM_PROMPTS: Record<string, string> = {
@@ -41,18 +48,19 @@ const PROVIDER_LABELS: Record<AIProvider, string> = {
 
 export async function POST(req: NextRequest) {
   const body = await req.json() as CopilotRequest
+  const enrichedBody = await enrichWithFoundryIQ(req, body)
   const provider = getProvider()
-  const prompt = buildPrompt(body)
+  const prompt = buildPrompt(enrichedBody)
 
   if (provider === 'azure') {
-    return callAzure(prompt, body)
+    return callAzure(prompt, enrichedBody)
   }
 
   if (provider === 'github') {
-    return callGitHubModels(prompt, body)
+    return callGitHubModels(prompt, enrichedBody)
   }
 
-  return mockResponse(body)
+  return mockResponse(enrichedBody)
 }
 
 function getProvider(): AIProvider {
@@ -60,16 +68,78 @@ function getProvider(): AIProvider {
   return value === 'azure' || value === 'github' ? value : 'mock'
 }
 
+async function enrichWithFoundryIQ(req: NextRequest, body: CopilotRequest): Promise<CopilotRequest> {
+  if (body.foundryIqContext && body.retrievedDocuments && body.writingStyle && body.safetyNote) {
+    return body
+  }
+
+  try {
+    const query = body.editorText || extractEditorText(body.prompt) || 'writing style themes character previous draft manuscript memory'
+    const response = await fetch(`${req.nextUrl.origin}/api/foundryiq`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, topK: 3 }),
+    })
+
+    if (!response.ok) {
+      return withMockFoundryIQ(body)
+    }
+
+    const data = await response.json()
+    return {
+      ...body,
+      foundryIqContext: body.foundryIqContext || data.context,
+      retrievedDocuments: body.retrievedDocuments || data.retrievedDocuments,
+      writingStyle: body.writingStyle || data.memory?.writingStyle,
+      themes: body.themes || data.memory?.themes,
+      characterMemory: body.characterMemory || data.memory?.charactersOrConcepts?.join(', '),
+      previousDraftSummary: body.previousDraftSummary || data.memory?.previousDraftSummary,
+      safetyNote: body.safetyNote || data.memory?.safetyNote,
+    }
+  } catch {
+    return withMockFoundryIQ(body)
+  }
+}
+
+function withMockFoundryIQ(body: CopilotRequest): CopilotRequest {
+  return {
+    ...body,
+    foundryIqContext: body.foundryIqContext || getMockFoundryIqContext(),
+    retrievedDocuments: body.retrievedDocuments || [
+      {
+        title: 'Pikiran yang Terus Membawa',
+        source: 'dummy-manuscript-memory',
+        chapter: 'Bab 1',
+        content: 'Narator orang pertama sedang membahas burnout, overthinking, self-worth, dan kebutuhan validasi dengan nada reflektif Indonesia.',
+      },
+    ],
+    writingStyle:
+      body.writingStyle ||
+      'Bahasa Indonesia reflektif, personal, hangat, sederhana, dan tidak menggurui.',
+    themes: body.themes || ['burnout', 'self-worth', 'validasi diri', 'overthinking'],
+    characterMemory:
+      body.characterMemory ||
+      'Narator orang pertama, anak muda Indonesia, kreatif, sering overthinking, dan belajar pulang kepada diri sendiri.',
+    previousDraftSummary:
+      body.previousDraftSummary ||
+      'Draft sebelumnya membahas proses memahami diri setelah terlalu lama mengejar validasi eksternal.',
+    safetyNote:
+      body.safetyNote ||
+      'Demo menggunakan dummy manuscript memory. Jangan unggah informasi rahasia.',
+  }
+}
+
 function buildPrompt(body: CopilotRequest): string {
   const mode = body.mode || 'suggest'
   const tone = body.tone || 'santai'
   const editorText = body.editorText || extractEditorText(body.prompt) || '(Belum ada teks editor.)'
-  const workIqContext = body.workIqContext || body.context || getMockWorkIqContext()
-  const manuscriptMemory = body.manuscriptMemory || getMockManuscriptMemory()
+  const foundryIqContext = body.foundryIqContext || body.context || body.workIqContext || getMockFoundryIqContext()
+  const retrievedDocuments = formatRetrievedDocuments(body.retrievedDocuments)
   const writingStyle = body.writingStyle || tone
-  const themes = body.themes?.length ? body.themes.join(', ') : 'pertumbuhan diri, refleksi, keberanian memulai ulang'
+  const themes = body.themes?.length ? body.themes.join(', ') : 'burnout, self-worth, validasi diri, overthinking'
   const characterMemory = body.characterMemory || getMockCharacterMemory()
   const previousDraftSummary = body.previousDraftSummary || getMockPreviousDraftSummary(editorText)
+  const safetyNote = body.safetyNote || 'Gunakan dummy manuscript memory untuk demo. Jangan unggah informasi rahasia.'
 
   return `${TONE_SYSTEM_PROMPTS[tone] || TONE_SYSTEM_PROMPTS.santai}
 
@@ -84,11 +154,11 @@ ${editorText}
 PERINTAH PENGGUNA:
 ${body.prompt || '(Tidak ada perintah tambahan.)'}
 
-MEMORI NASKAH:
-${manuscriptMemory}
+KONTEKS FOUNDRY IQ-STYLE MANUSCRIPT KNOWLEDGE RETRIEVAL:
+${foundryIqContext}
 
-KONTEKS WORK IQ ATAU MOCK WORK IQ:
-${workIqContext}
+DOKUMEN TERAMBIL DARI KNOWLEDGE INDEX:
+${retrievedDocuments}
 
 GAYA PENULISAN:
 ${writingStyle}
@@ -102,12 +172,15 @@ ${characterMemory}
 RINGKASAN DRAFT SEBELUMNYA:
 ${previousDraftSummary}
 
+CATATAN KEAMANAN:
+${safetyNote}
+
 Selalu jawab dalam Bahasa Indonesia.
 Jika mode consistency, gunakan struktur:
-- Yang sudah konsisten
-- Yang kurang konsisten
-- Saran perbaikan
-- Versi revisi singkat`
+- Yang sudah konsisten:
+- Yang kurang konsisten:
+- Saran perbaikan:
+- Versi revisi singkat:`
 }
 
 async function callAzure(prompt: string, body: CopilotRequest) {
@@ -198,7 +271,7 @@ function streamProviderResponse(response: Response, provider: AIProvider) {
       'Cache-Control': 'no-cache',
       'X-AI-Provider': provider,
       'X-AI-Provider-Status': PROVIDER_LABELS[provider],
-      'X-IQ-Status': 'Microsoft IQ Layer: Work IQ-ready fallback',
+      'X-IQ-Status': 'Microsoft IQ Layer: Foundry IQ',
     },
   })
 }
@@ -211,7 +284,7 @@ function mockResponse(body: CopilotRequest, notice?: string) {
       'Cache-Control': 'no-cache',
       'X-AI-Provider': 'mock',
       'X-AI-Provider-Status': PROVIDER_LABELS.mock,
-      'X-IQ-Status': 'Microsoft IQ Layer: Work IQ-ready fallback',
+      'X-IQ-Status': 'Microsoft IQ Layer: Foundry IQ',
     },
   })
 }
@@ -253,22 +326,22 @@ ${buildRevision(text, style, 'lebih reflektif dan mengalir')}`
   }
 
   if (mode === 'consistency') {
-    return `${opening}Yang sudah konsisten
+    return `${opening}Yang sudah konsisten:
 - Suara narator terasa personal dan reflektif.
 - Tema utama tentang proses memahami diri masih terbaca jelas.
 - Nuansa kalimat cenderung hangat, sehingga cocok untuk pembaca yang mencari tulisan yang menenangkan.
 
-Yang kurang konsisten
+Yang kurang konsisten:
 - Beberapa bagian masih berpindah antara nada analitis dan nada intim tanpa transisi yang halus.
 - Jika ada tokoh atau konsep penting, namanya perlu disebut dengan pola yang sama agar pembaca tidak merasa sedang membaca catatan yang terpisah.
 - Motivasi emosional di balik paragraf ini masih bisa dibuat lebih spesifik.
 
-Saran perbaikan
+Saran perbaikan:
 - Tambahkan satu kalimat penghubung yang menjelaskan mengapa momen ini penting bagi narator.
 - Pilih satu metafora utama, lalu pakai kembali secara halus agar naskah terasa punya benang merah.
 - Pertahankan gaya ${style}, tetapi kurangi kalimat yang terlalu umum.
 
-Versi revisi singkat
+Versi revisi singkat:
 ${buildRevision(text, style, 'lebih konsisten dengan memori naskah dan tema utama')}`
   }
 
@@ -301,6 +374,18 @@ function summarizeText(text: string): string {
   return cleaned.length > 70 ? `${cleaned.slice(0, 70)}...` : cleaned
 }
 
+function formatRetrievedDocuments(documents?: CopilotRequest['retrievedDocuments']): string {
+  if (!documents?.length) {
+    return '- Pikiran yang Terus Membawa | Bab 1 | dummy-manuscript-memory: Narator orang pertama membahas burnout, validasi diri, dan overthinking dengan gaya reflektif.'
+  }
+
+  return documents
+    .map((doc) => {
+      return `- ${doc.title} | ${doc.chapter} | ${doc.source}: ${doc.content}`
+    })
+    .join('\n')
+}
+
 function buildRevision(text: string, tone: string, goal: string): string {
   const fallback = 'Aku berhenti sejenak, mencoba mendengar ulang isi kepala sendiri. Ada bagian dari diriku yang masih ingin berlari, tetapi ada juga bagian lain yang mulai belajar untuk tinggal, menarik napas, dan menamai rasa takut itu pelan-pelan.'
   const base = text.trim() || fallback
@@ -330,12 +415,8 @@ function getTemperature(tone?: string): number {
   return 0.7
 }
 
-function getMockWorkIqContext(): string {
-  return '[Work IQ mock]: Naskah memiliki suara reflektif orang pertama, hangat, dan fokus pada proses memahami diri. Metafora yang sering muncul: ruang di kepala, beban yang dipanggul, dan cahaya kecil setelah jeda.'
-}
-
-function getMockManuscriptMemory(): string {
-  return 'MVP memakai mock manuscript memory fallback: narator sedang menulis perjalanan personal tentang overthinking, keberanian merawat diri, dan proses membangun ulang kepercayaan diri.'
+function getMockFoundryIqContext(): string {
+  return '[Foundry IQ-style mock retrieval]: Naskah memiliki suara reflektif orang pertama, hangat, dan fokus pada burnout, self-worth, validasi diri, overthinking, serta proses pulih. Metafora yang sering muncul: ruang di kepala, beban yang digendong, napas yang diberi tempat, dan pulang kepada diri sendiri.'
 }
 
 function getMockCharacterMemory(): string {

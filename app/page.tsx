@@ -15,6 +15,25 @@ interface Suggestion {
   mode: AIMode
 }
 
+interface FoundryIQResponse {
+  context: string
+  source: 'mock-foundryiq' | 'foundryiq' | 'azure-search'
+  status: 'fallback' | 'active'
+  retrievedDocuments: Array<{
+    title: string
+    source: string
+    chapter: string
+    content: string
+  }>
+  memory: {
+    writingStyle: string
+    themes: string[]
+    charactersOrConcepts: string[]
+    previousDraftSummary: string
+    safetyNote: string
+  }
+}
+
 export default function Home() {
   const [text, setText]                         = useState('')
   const [tone, setTone]                         = useState<Tone>('santai')
@@ -22,25 +41,34 @@ export default function Home() {
   const [suggestions, setSuggestions]           = useState<Suggestion[]>([])
   const [isLoading, setIsLoading]               = useState(false)
   const [error, setError]                       = useState<string | null>(null)
-  const [contextSource, setContextSource]       = useState<'workiq' | 'mock' | 'none'>('none')
+  const [contextSource, setContextSource]       = useState<'mock-foundryiq' | 'foundryiq' | 'azure-search' | 'none'>('none')
   const [appliedText, setAppliedText]           = useState('')
   const [aiProviderStatus, setAiProviderStatus] = useState('AI Provider: Mock Demo Mode')
-  const [iqStatus, setIqStatus]                 = useState('Microsoft IQ Layer: Work IQ-ready fallback')
+  const [iqStatus, setIqStatus]                 = useState('Microsoft IQ Layer: Foundry IQ')
+  const [iqRetrievalStatus, setIqRetrievalStatus] = useState('Status: Demo fallback active')
 
   const lastRequestRef = useRef<AbortController | null>(null)
 
-  const fetchWorkIQContext = useCallback(async (query: string) => {
+  const fetchFoundryIQContext = useCallback(async (query: string): Promise<FoundryIQResponse | null> => {
     try {
-      const res = await fetch('/api/workiq', {
+      const res = await fetch('/api/foundryiq', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query }),
       })
-      const data = await res.json()
-      setContextSource(data.source as 'workiq' | 'mock')
-      return data.context as string
+      const data = await res.json() as FoundryIQResponse
+      setContextSource(data.source)
+      setIqStatus('Microsoft IQ Layer: Foundry IQ')
+      setIqRetrievalStatus(
+        data.source === 'mock-foundryiq'
+          ? 'Status: Demo fallback active'
+          : 'Status: Knowledge retrieval active'
+      )
+      return data
     } catch {
-      return ''
+      setContextSource('mock-foundryiq')
+      setIqRetrievalStatus('Status: Demo fallback active')
+      return null
     }
   }, [])
 
@@ -57,8 +85,8 @@ export default function Home() {
     setSuggestions([])
 
     try {
-      // 1. Ambil konteks dari Work IQ
-      const context = await fetchWorkIQContext(text.slice(0, 200))
+      // 1. Ambil konteks dari Foundry IQ-style knowledge retrieval
+      const foundryIQ = await fetchFoundryIQContext(text.slice(0, 200))
 
       // 2. Buat prompt sesuai mode
       const prompts: Record<AIMode, string> = {
@@ -76,22 +104,23 @@ export default function Home() {
         body: JSON.stringify({
           prompt: prompts[aiMode],
           tone,
-          context,
-          workIqContext: context,
+          context: foundryIQ?.context || '',
+          foundryIqContext: foundryIQ?.context || '',
+          retrievedDocuments: foundryIQ?.retrievedDocuments || [],
           mode: aiMode,
           editorText: text,
-          manuscriptMemory: 'Mock manuscript memory fallback aktif untuk MVP demo. Naskah berfokus pada refleksi personal, proses memahami diri, dan perubahan kecil yang terasa jujur.',
-          writingStyle: tone,
-          themes: ['pertumbuhan diri', 'refleksi', 'keberanian memulai ulang'],
-          characterMemory: 'Narator orang pertama yang sensitif, kreatif, dan sedang belajar mengurangi overthinking tanpa menghakimi diri sendiri.',
-          previousDraftSummary: text.slice(0, 280),
+          writingStyle: foundryIQ?.memory.writingStyle || tone,
+          themes: foundryIQ?.memory.themes || ['burnout', 'self-worth', 'overthinking'],
+          characterMemory: foundryIQ?.memory.charactersOrConcepts.join(', ') || '',
+          previousDraftSummary: foundryIQ?.memory.previousDraftSummary || text.slice(0, 280),
+          safetyNote: foundryIQ?.memory.safetyNote || 'Jangan unggah informasi rahasia.',
         }),
       })
 
       if (!res.ok) throw new Error(`API error ${res.status}`)
 
       setAiProviderStatus(res.headers.get('X-AI-Provider-Status') || 'AI Provider: Mock Demo Mode')
-      setIqStatus(res.headers.get('X-IQ-Status') || 'Microsoft IQ Layer: Work IQ-ready fallback')
+      setIqStatus(res.headers.get('X-IQ-Status') || 'Microsoft IQ Layer: Foundry IQ')
 
       // 4. Parse streaming response
       const reader = res.body?.getReader()
@@ -134,7 +163,7 @@ export default function Home() {
     } finally {
       setIsLoading(false)
     }
-  }, [text, tone, aiMode, fetchWorkIQContext])
+  }, [text, tone, aiMode, fetchFoundryIQContext])
 
   const handleApply = useCallback((suggestion: string) => {
     if (aiMode === 'revise' || aiMode === 'continue') {
@@ -153,10 +182,10 @@ export default function Home() {
           </div>
           <div>
             <h1 className="text-sm font-semibold text-ink-900 leading-none">
-              Writing Companion
+              NulisIQ
             </h1>
             <p className="text-xs text-ink-400 leading-none mt-0.5">
-              Agents League Hackathon 2026
+              Memory-Aware Writing Companion
             </p>
           </div>
         </div>
@@ -207,6 +236,7 @@ export default function Home() {
             contextSource={contextSource}
             aiProviderStatus={aiProviderStatus}
             iqStatus={iqStatus}
+            iqRetrievalStatus={iqRetrievalStatus}
           />
         </aside>
       </div>

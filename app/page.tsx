@@ -24,6 +24,8 @@ export default function Home() {
   const [error, setError]                       = useState<string | null>(null)
   const [contextSource, setContextSource]       = useState<'workiq' | 'mock' | 'none'>('none')
   const [appliedText, setAppliedText]           = useState('')
+  const [aiProviderStatus, setAiProviderStatus] = useState('AI Provider: Mock Demo Mode')
+  const [iqStatus, setIqStatus]                 = useState('Microsoft IQ Layer: Work IQ-ready fallback')
 
   const lastRequestRef = useRef<AbortController | null>(null)
 
@@ -60,9 +62,10 @@ export default function Home() {
 
       // 2. Buat prompt sesuai mode
       const prompts: Record<AIMode, string> = {
-        suggest:  `Berikan saran konkret untuk meningkatkan tulisan berikut:\n\n${text}`,
-        revise:   `Berikan 3 versi alternatif yang lebih baik dari paragraf berikut. Format: berikan setiap versi dipisah dengan "---":\n\n${text}`,
-        continue: `Lanjutkan tulisan berikut secara natural, 2-3 kalimat:\n\n${text}`,
+        suggest:     `Berikan saran konkret untuk meningkatkan tulisan berikut:\n\n${text}`,
+        revise:      `Berikan 3 versi alternatif yang lebih baik dari paragraf berikut. Format: berikan setiap versi dipisah dengan "---":\n\n${text}`,
+        continue:    `Lanjutkan tulisan berikut secara natural, 2-3 kalimat:\n\n${text}`,
+        consistency: `Periksa konsistensi gaya, tema, karakter, konsep, dan alur dari tulisan berikut:\n\n${text}`,
       }
 
       // 3. Panggil Copilot API dengan streaming
@@ -74,11 +77,21 @@ export default function Home() {
           prompt: prompts[aiMode],
           tone,
           context,
+          workIqContext: context,
           mode: aiMode,
+          editorText: text,
+          manuscriptMemory: 'Mock manuscript memory fallback aktif untuk MVP demo. Naskah berfokus pada refleksi personal, proses memahami diri, dan perubahan kecil yang terasa jujur.',
+          writingStyle: tone,
+          themes: ['pertumbuhan diri', 'refleksi', 'keberanian memulai ulang'],
+          characterMemory: 'Narator orang pertama yang sensitif, kreatif, dan sedang belajar mengurangi overthinking tanpa menghakimi diri sendiri.',
+          previousDraftSummary: text.slice(0, 280),
         }),
       })
 
       if (!res.ok) throw new Error(`API error ${res.status}`)
+
+      setAiProviderStatus(res.headers.get('X-AI-Provider-Status') || 'AI Provider: Mock Demo Mode')
+      setIqStatus(res.headers.get('X-IQ-Status') || 'Microsoft IQ Layer: Work IQ-ready fallback')
 
       // 4. Parse streaming response
       const reader = res.body?.getReader()
@@ -192,6 +205,8 @@ export default function Home() {
             onApply={handleApply}
             onRetry={fetchAISuggestion}
             contextSource={contextSource}
+            aiProviderStatus={aiProviderStatus}
+            iqStatus={iqStatus}
           />
         </aside>
       </div>

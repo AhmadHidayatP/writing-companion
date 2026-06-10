@@ -5,12 +5,13 @@ import { NextRequest, NextResponse } from 'next/server'
 export async function POST(req: NextRequest) {
   const { query, topK = 3 } = await req.json()
 
+  const mode     = process.env.WORKIQ_MODE || 'mock'
   const endpoint = process.env.WORKIQ_ENDPOINT
   const apiKey   = process.env.WORKIQ_API_KEY
   const index    = process.env.WORKIQ_INDEX_NAME || 'writing-companion-index'
 
   // Jika Work IQ belum dikonfigurasi, return mock context untuk development
-  if (!endpoint || !apiKey) {
+  if (mode === 'mock' || !endpoint || !apiKey) {
     return NextResponse.json({
       context: getMockContext(query),
       source: 'mock',
@@ -51,7 +52,7 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error('Work IQ error:', error)
     // Graceful fallback — jangan crash app
-    return NextResponse.json({ context: '', source: 'error' })
+    return NextResponse.json({ context: getMockContext(query), source: 'mock' })
   }
 }
 

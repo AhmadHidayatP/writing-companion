@@ -3,7 +3,7 @@
 import { Sparkles, RefreshCw, Copy, Check, AlertCircle } from 'lucide-react'
 import { useState } from 'react'
 
-export type AIMode = 'suggest' | 'revise' | 'continue'
+export type AIMode = 'suggest' | 'revise' | 'continue' | 'consistency'
 
 interface Suggestion {
   id: string
@@ -20,17 +20,21 @@ interface Props {
   onApply: (text: string) => void
   onRetry: () => void
   contextSource: 'workiq' | 'mock' | 'none'
+  aiProviderStatus: string
+  iqStatus: string
 }
 
 const MODES: { value: AIMode; label: string; desc: string }[] = [
-  { value: 'suggest',  label: 'Saran',     desc: 'Kritik & saran perbaikan' },
-  { value: 'revise',   label: 'Revisi',    desc: '3 versi alternatif' },
-  { value: 'continue', label: 'Lanjutkan', desc: 'Sambung tulisan' },
+  { value: 'suggest',     label: 'Saran',       desc: 'Kritik & saran perbaikan' },
+  { value: 'revise',      label: 'Revisi',      desc: '3 versi alternatif' },
+  { value: 'continue',    label: 'Lanjutkan',   desc: 'Sambung tulisan' },
+  { value: 'consistency', label: 'Konsistensi', desc: 'Cek gaya, tema, dan memori' },
 ]
 
 export default function AIPanel({
   suggestions, isLoading, error, activeMode,
   onModeChange, onApply, onRetry, contextSource,
+  aiProviderStatus, iqStatus,
 }: Props) {
   const [copiedId, setCopiedId] = useState<string | null>(null)
 
@@ -62,10 +66,19 @@ export default function AIPanel({
         ))}
       </div>
 
+      <div className="mx-3 mt-3 space-y-1.5">
+        <div className="px-3 py-1.5 rounded-lg text-xs bg-green-50 text-green-700 border border-green-200">
+          {aiProviderStatus}
+        </div>
+        <div className="px-3 py-1.5 rounded-lg text-xs bg-blue-50 text-blue-700 border border-blue-200">
+          {iqStatus}
+        </div>
+      </div>
+
       {/* Context badge */}
       {contextSource !== 'none' && (
         <div className={`
-          mx-3 mt-3 px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5
+          mx-3 mt-2 px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5
           ${contextSource === 'workiq'
             ? 'bg-blue-50 text-blue-700 border border-blue-200'
             : 'bg-ink-100 text-ink-500 border border-ink-200'
